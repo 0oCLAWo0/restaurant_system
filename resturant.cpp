@@ -10,7 +10,16 @@
 #include <string>   //stof,stod
 #include <limits>   //numeric_limits
 #include <ctime>    // DATE AND TIME
+#include <windows.h>
+#include <mysql.h>
+#include <mysqld_error.h>
+#include <sstream>
 using namespace std;
+
+const char *HOST = "localhost";
+const char *USER = "root";
+const char *DB = "Restaurant";
+MYSQL *conn;
 
 //---------------------------Forward Declarations--------------------------------------------------------------
 
@@ -575,16 +584,40 @@ void resturant ::menumaker(void)
 
     {      
 
+          
+            string name;
+            float cost;
+
             cin.ignore(numeric_limits<streamsize>::max() , '\n' );
             cout << "\n  Enter the dish(" << counter + 1 << ")'s name :  ";
-            getline(cin, dishes[counter]);
+            getline(cin, name);
+            dishes[counter] = name;
 
             cout << "\n\n  Enter the price for dish(" << dishes[counter] << ")  :  ";
-            price[counter] = use.StoFconv();
+            cost = use.StoFconv();
+            price[counter] = cost;
             counter++; // initilized with '0' and updates +1 after addititon of every item
 
-                
-                cout << "\n  Enter '0' if done                        Enter '1' to add next dish\n";
+            
+            // insert item into database
+            string ID = to_string(counter + 1000);
+            string PRICE = to_string(cost);
+            
+            string ins = "INSERT INTO menu (dish_id, dish, price) VALUES ('" + ID + "', '" + name + "', '" + PRICE + "')";
+            if (mysql_query(conn, ins.c_str()))
+            {
+               cout << "Error: " << mysql_error(conn) << endl;
+            }
+            else
+            {
+              cout << "Item Added Successfuly." << endl;
+            }
+            Sleep(2000);
+            
+            
+			// more items to add ?
+            
+            cout << "\n  Enter '0' if done                        Enter '1' to add next dish\n";
                 cout <<   "                               ENTER  :  ";    loop = use.StoCconv();
             
             while (loop != '1' && loop != '0' )
@@ -593,7 +626,7 @@ void resturant ::menumaker(void)
                 cout << "\n  Enter '0' if done                        Enter '1' to add next dish\n";
                 cout <<   "                               ENTER  :  ";    loop = use.StoCconv();
                 
-            }
+            } 
 
     }
 }
@@ -813,7 +846,7 @@ void resturant ::changeprice(void)
 void resturant ::editmenu(void)
 {
 
-    for (bool loop = true; loop == true;)
+    for (bool loop = true; loop;)
     {
         cout << "\n\n  Enter'0' to GO BACK                                                                  Enter '1' to ADD ITEM in MENU \n " ;
         
@@ -1043,9 +1076,16 @@ float forcereturn ::StoFconv(void)
 
 
 
+// ********************   ASK PASSWORD FROM USER TO ACCESS DATABASE **********************  
 
-
-
+string getPassword(){                
+	cout << "\t\tENTER PASSWORD TO CONNECT WITH DATABASE:  ";
+	string pwd;
+	cin >> pwd;
+	system( "cls" );
+	
+	return pwd;
+}
 
 
 
@@ -1055,10 +1095,25 @@ float forcereturn ::StoFconv(void)
 
 int main()
 {
+
+	const char *PW = getPassword().c_str();	
+    conn = mysql_init(NULL);
+
+    if (!mysql_real_connect(conn, HOST, USER, PW, DB, 3306, NULL, 0))
+    {
+        cout << "Error: " << mysql_error(conn) << endl;
+    }
+    else
+    {
+        cout << "\tLogged in!" << endl;
+    }
+    Sleep(1000);
+    
     forcereturn use; //forcereturn is a class ---and --- 'use' is its object;
     Co_Details view;
-
-    for (int loop = 1; loop == 1;)
+    
+    bool loop = true;
+    while(loop)
     {
         cout << "\n\n  Enter '0' to exit                                                                    Enter '1' to set MENU\n ";
 
@@ -1073,7 +1128,7 @@ int main()
        switch (choice)
         {
         case '0':
-            loop = 30;
+            loop = false;
             break;
         case '1':
             order.editmenu();
