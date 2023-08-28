@@ -10,13 +10,17 @@
 #include <string>   //stof,stod
 #include <limits>   //numeric_limits
 #include <ctime>    // DATE AND TIME
+#include <vector>
+#include<unordered_map>
 #include <cstdio>
+#include <iomanip>
 #include <chrono>
 #include <thread>
 #include <windows.h>
 #include <mysql.h>
 #include <mysqld_error.h>
 #include <sstream>
+
 using namespace std;
 
 const char *HOST = "localhost";
@@ -26,8 +30,7 @@ MYSQL *conn;
 
 //---------------------------Forward Declarations--------------------------------------------------------------
 
-class resturant;
-class Co_Details;
+class restaurant;
 void deleteFromOrders(string order_id, string dish_id = "null", bool choice = true);
 
 //------------x---------------x-------------x-------------------x--------------x----------------x----------------x
@@ -49,70 +52,12 @@ public:
     char StoCconv(void);                       // string to character converter
     double StoDconv(void);                // string to double converter
     float StoFconv(void);               // string to float converter
-};
+} use;
 
-//------------x---------------x-------------x-------------------x--------------x----------------x----------------x
 
-//-----------------CLASS Custmor Details-----------------------
+//-----------------CLASS RESTAURANT-------------------
 
-//class Co_Details
-//
-//{
-//
-//private:
-//    friend class resturant;
-//
-//    forcereturn use; //differnt class with object
-//
-//    string Co_name;
-//    unsigned short int itemcount; // to store total number of item ordered for each order
-//    long long int Co_phonenumber;  // to store customer's phone number
-//    unsigned short int Co_visit;   // To store the custmore frequrnt visit
-//    unsigned short int Co_OrderNo; // To store every order no.
-//    float discount, tax_charge, total = 0.00 /* total amount which custmor have to pay */, paid /* amount paid by custmor */, change /*amount return by worker */;
-//
-//    
-//    string storetime; // to store a particular time
-//
-//    void SaveOrderNo(unsigned short int i);  // function to assign order no to co_orderno
-//    void SaveName(void);                     // assign name to Co_name member
-//    void SavePhoneNo_(void);                // assign phonenumber to co_phonenumber
-//    void Save_O_DateTime(void);             // display the current time and also store each diplay  "time" in different strings for every case 
-//    void Display_O_DateTime(void);          //  display the stored time (not current time)
-//    void CalculateBill(unsigned short int accept); // it will calulate the bill 
-//    void PrintBill(unsigned short int accept, bool dis); // it will print the bill
-//    inline void Count_Co_Visit(void) { Co_visit++; }; //functioning of function Count_Co_Visit
-//
-//public:
-//    Co_Details() : Co_visit(0), itemcount(0) {}  // Constructor
-//};
-//
-////------------x---------------x-------------x-------------------x--------------x----------------x----------------x
-//
-////----------------Save-Name Function-----------------
-//
-//inline void Co_Details ::SaveName(void)
-//{
-//    cin.ignore(numeric_limits<streamsize>::max(), '\n');
-//    getline(cin, Co_name);
-//}
-//
-////------------x---------------x-------------x-------------------x--------------x----------------x----------------x
-//
-////----------------Save-Phone Number Function-------------------
-//
-//inline void Co_Details ::SavePhoneNo_(void)
-//{
-//    Co_phonenumber = use.StoUILLconv();
-//    if (Co_phonenumber < 1000000000 || Co_phonenumber > 9999999999)
-//        Co_phonenumber = 232323232323;
-//}
-
-//------------x---------------x-------------x-------------------x--------------x----------------x----------------x
-
-//-----------------CLASS RESTURANT-------------------
-
-class resturant
+class restaurant
 {
 private:
     //*friend class Co_Details;
@@ -139,10 +84,11 @@ private:
     void menudisplay(void);     // display the menu you set
     void changeprice(void);    // change price or dish name in the menu
     void RemoveItem ( void ) ;              // remove items from menu
- 
+    vector<float> CalculateBill(int orderNo, vector<pair<string, int>> &i_q); // to calculate bill
+    void PrintBill(string order_id);            // to print bill/info for 3 cases, 0_customer, 1_admin, -1_customer(free order)
 
-public:
-    void editmenu(void);             // to view all the options available for menu - setting
+    public : 
+    void editmenu(void); // to view all the options available for menu - setting
     void takeorder(void);            // take order 
     void DisplayData(void);          // display custmor's data with the help of order number          
     void SaveOrder_id(unsigned short int save);   // assign dish'id to  order'id[x][y](above) 
@@ -164,7 +110,23 @@ string getPassword(){
 	return pwd;
 }
 
-//// ---------------------Save orderdone Date and Time----------------------------
+//// ---------------------GET orderdone Time----------------------------
+string getCurrTime()
+{
+    std::time_t currentTime = std::time(nullptr);
+    std::tm timeInfo = *std::localtime(&currentTime);
+
+    std::ostringstream formattedTime;
+    formattedTime << std::setfill('0')
+                  << std::setw(2) << timeInfo.tm_hour << ":"
+                  << std::setw(2) << timeInfo.tm_min << ":"
+                  << std::setw(2) << timeInfo.tm_sec;
+
+    return formattedTime.str();
+}
+
+
+//// ---------------------get orderdone Date ----------------------------
 
 string getDate() {
     auto now = std::chrono::system_clock::now();
@@ -193,7 +155,9 @@ int getTotalItems(){
         res = mysql_store_result(conn);
         if (res)
         {
-            return mysql_num_rows(res);
+            int totalItems = mysql_num_rows(res);
+            mysql_free_result(res);
+            return totalItems;
         }
     }
     return 0;
@@ -208,7 +172,7 @@ int getOrderNo()
     if(mysql_query(conn, show.c_str()))
     {
         cout << "Error: " << mysql_error(conn) << endl;
-        sleep(4000);
+        std::this_thread::sleep_for(std::chrono::milliseconds(4000));
     }
     else
     {
@@ -216,10 +180,39 @@ int getOrderNo()
         res = mysql_store_result(conn);
         if (res)
         {
-            return mysql_num_rows(res);
+            int orderNo = mysql_num_rows(res);
+            mysql_free_result(res);
+            return orderNo;
         }
     }
     return 0;
+}
+
+//  ***********************   GET DISH_ID FROM MENU FROM DISH NAME  *********************
+string getDishId(string name)
+{
+    string show = "SELECT dish_id FROM menu WHERE dish = '" + name + "'";
+    
+    if(mysql_query(conn, show.c_str()))
+    {
+        cout << "Error: " << mysql_error(conn) << endl;
+        std::this_thread::sleep_for(std::chrono::milliseconds(4000));
+    }
+    else
+    {
+        MYSQL_RES *res;
+        res = mysql_store_result(conn);
+        if (res)
+        {
+            MYSQL_ROW row = mysql_fetch_row(res);
+            if(row && row[0])
+            {
+            	mysql_free_result(res);
+            	return row[0];
+			}
+        }
+    }
+    return "0";
 }
 
 //  ***********************   SEARCH DISH IN ORDER   *********************
@@ -240,17 +233,51 @@ bool searchDishInOrder(string order_id, string dish_id)
         if (res)
         {
             MYSQL_ROW row = mysql_fetch_row(res);
-            if(row && row[0])
-            return true;
+            mysql_free_result(res); 
+            
+			if(row && row[0])       
+			return true;
         }
     }
     return false;
 }
 
-//   *********************  GET PRICE FOR DISHES FROM DATABSE - TABLE - menu  ********************
-string getPrice(string dish_id)
+
+//  ***********************   SEARCH DISH IN ORDER   *********************
+void printOrderItem(string order_id)
 {
-    string show = "SELECT price FROM menu WHERE dish_id = ' " + dish_id + " '";
+  string show = "SELECT dish, price FROM orders WHERE order_id = '"+ order_id +"'";
+
+   if (mysql_query(conn, show.c_str()))
+   {
+     cout << "Error: " << mysql_error(conn) << endl;
+     Sleep(3000);
+   }
+   
+   else
+   {
+     MYSQL_RES *res;
+     res = mysql_store_result(conn);
+     if (res)
+     {
+       cout << "\n\n\t*****   Good Food, Good Life   *****\n";
+       printf("\n\n\t   %-30s   %-30s\n", "ITEM", "PRICE");
+       MYSQL_ROW row;
+
+       while (row = mysql_fetch_row(res))
+       { 
+       printf("\t   %-30s   %-30s\n", row[0], row[1]);
+       }  
+      
+	    mysql_free_result(res);
+     }
+   }
+}
+
+//   *********************  GET PRICE FOR DISHES FROM DATABSE - TABLE - menu  ********************
+string getPrice(string dish_name)
+{
+    string show = "SELECT price FROM menu WHERE dish = '" + dish_name + "'";
 
     if (mysql_query(conn, show.c_str()))
     {
@@ -265,12 +292,29 @@ string getPrice(string dish_id)
         {
             MYSQL_ROW row;
             row = mysql_fetch_row(res);
+            mysql_free_result(res);
             
 			if(row && row[0])
             return row[0];
         }
     }
-    return "null";
+    
+    return "0";
+}
+
+//   *********************  GET TOTAL PRICE OF ORDER  ********************
+float getTotalOrderAmount(vector<pair<string, int>> &i_q)
+{
+    float sum = 0.00;
+    for(auto order : i_q)
+    {
+        int quantity = order.second;
+        string dish_name = order.first;
+
+        sum += stof(getPrice(dish_name)) * quantity;
+    }
+
+    return sum;
 }
 
 //   *********************  UPDATE ORDER DISHES TO DATABSE - TABLE - orders  ********************
@@ -291,42 +335,77 @@ void updateOrder(string order_id, string dish_id, string quantity, string price)
     }
 }
 
-//   *********************  INSERT ORDER ITEM TO DATABSE - TABLE - orders  ********************
-void insertItemsToOrder(string order_id, string dish_id, string quantity, string price)
-{
-	if(searchDishInOrder(order_id, dish_id))
-	{
-		if(quantity == "0")
-		deleteFromOrders(order_id, dish_id, false);
-		
-		else
-		updateOrder(order_id, dish_id, quantity, price);
-		
-		return;
-	}
-	
-	
-	price = to_string(stof(quantity)* stof(price));
-    string ins = "INSERT INTO orders (order_id, dish_id, quantity, price) VALUES ('" + order_id + "', '" + dish_id + "', '" + quantity + "', '" + price + "')";
 
-    if (mysql_query(conn, ins.c_str()))
+//   *********************  INSERT ORDER ITEM TO DATABSE - TABLE - orders  ********************
+void insertItemsToOrder(string order_id, vector<pair<string, int>> &i_q)
+{
+	
+    // Begin transaction
+    if (mysql_query(conn, "START TRANSACTION"))
     {
         cout << "\t\tError: " << mysql_error(conn) << endl;
-        std::this_thread::sleep_for(std::chrono::milliseconds(3000));
+        std::this_thread::sleep_for(std::chrono::milliseconds(7000));
+        return ;
+    }
+
+    bool success = true;
+
+    // Insert data using a loop
+    for (auto order : i_q)
+    {   
+	    if(order.second == 0)
+		continue;
+		  
+        string name =  order.first;
+        string quantity = to_string(order.second);
+        string dish_id = getDishId(name);
+        string price = to_string(stof(getPrice(name))*order.second);
+        
+        string query = "INSERT INTO orders (order_id, dish_id, dish, quantity, price) VALUES ('" + order_id + "', '" + dish_id + "', '" + name + "', '" + quantity + "', '" + price + "')";
+
+        if (mysql_query(conn, query.c_str()))
+        {
+        cerr << "Insert failed: " << mysql_error(conn) << std::endl;
+        std::this_thread::sleep_for(std::chrono::milliseconds(6000));
+        
+        success = false;
+        break; // Exit loop on first error
+        }
+    }
+
+    // Commit or rollback transaction based on success
+    if (success)
+    {
+        if (mysql_query(conn, "COMMIT"))
+        {
+        std::cerr << "Commit failed" << std::endl;
+        }
+        else
+        {
+        std::cout << "All rows inserted successfully" << std::endl;
+        }
     }
     else
     {
-        cout << "\t\t  Item Added" << endl;
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        if (mysql_query(conn, "ROLLBACK"))
+        {
+        std::cerr << "Rollback failed" << std::endl;
+        }
+        else
+        {
+        std::cerr << "One or more rows failed to insert, rolling back" << std::endl;
+        }
     }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(4000));
     system("cls");
 }
 
 //   *********************  INSERT DETAILS ITEM TO DATABSE - TABLE - customer  ********************
-void insertCustomerDetails(string order_id, string contact, string name)
+void insertCustomerDetails(string order_id, string contact, string name, string time)
 {
 	string date = order_id.substr(0, 10);
-    string ins = "INSERT INTO customers (order_id, contact, name, date) VALUES ('" + order_id + "', '" + contact + "', '" + name + "', '" + date + "')";
+    string ins = "INSERT INTO customers (order_id, contact, name, date, time) VALUES ('" + order_id + "', '" + contact + "', '" + name + "', '" + date + "', '" + time +"')";
 
     if (mysql_query(conn, ins.c_str()))
     {
@@ -340,6 +419,80 @@ void insertCustomerDetails(string order_id, string contact, string name)
         
     }
     system("cls");
+}
+
+//   *********************  GET CUSTOMER DETAILS FROM DATABSE  ********************
+vector<string> getCustomerDetails(string order_id)
+{
+    string show = "SELECT name, contact, time FROM customers WHERE order_id = '" + order_id + "'";
+
+    if (mysql_query(conn, show.c_str()))
+    {
+        cout << "Error: " << mysql_error(conn) << endl;
+        std::this_thread::sleep_for(std::chrono::milliseconds(4000));
+    }
+    else
+    {
+        MYSQL_RES *res;
+        res = mysql_store_result(conn);
+        if (res)
+        {
+        MYSQL_ROW row;
+        row = mysql_fetch_row(res);
+        mysql_free_result(res);
+
+        vector<string> details = {row[0], row[1], row[2]};
+        return details;
+        }
+    }
+
+    return {};
+}
+
+//   *********************  INSERT BILL DETAILS ITEM TO DATABSE - TABLE - bill  ********************
+void insertBillDetails(string order_id, vector<string> &bill)
+{
+    string ins = "INSERT INTO bill (order_id, total, discount, paid, change_amount, tax) VALUES ('" + order_id + "', '" + bill[2] + "', '" + bill[0] + "', '" + bill[3] + "', '" + bill[4] + "', '" + bill[1] + "')";
+
+    if (mysql_query(conn, ins.c_str()))
+    {
+        cout << "\t\tError: " << mysql_error(conn) << endl;
+        std::this_thread::sleep_for(std::chrono::milliseconds(7000));
+    }
+    else
+    {
+        cout << "\t\tDeatails Filled" << endl;
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+    system("cls");
+}
+
+//   *********************  GET bill DETAILS FROM DATABSE  ********************
+vector<string> fetchBill(string order_id)
+{
+    string show = "SELECT total, paid, change_amount, tax, discount FROM bill WHERE order_id = '" + order_id + "'";
+
+    if (mysql_query(conn, show.c_str()))
+    {
+        cout << "Error: " << mysql_error(conn) << endl;
+        std::this_thread::sleep_for(std::chrono::milliseconds(4000));
+    }
+    else
+    {
+        MYSQL_RES *res;
+        res = mysql_store_result(conn);
+        if (res)
+        {
+        MYSQL_ROW row;
+        row = mysql_fetch_row(res);
+        mysql_free_result(res);
+
+        vector<string> bill = {row[0], row[1], row[2], row[3], row[4]};
+        return bill;
+        }
+    }
+
+    return {};
 }
 
 //   *********************  DELETE ORDER FROM DATABSE - TABLE - orders  ********************
@@ -391,132 +544,117 @@ void deleteFromOrders(string order_id, string dish_id, bool choice)
 //
 ////------------x---------------x-------------x-------------------x--------------x----------------x----------------x
 //
-////-----------------Calculate Bill Functon---------------------------
-//
-//void Co_Details ::CalculateBill(unsigned short int accept)
-//{
-//
-//    cout << "\n  Enter Discount like the below example: \n  ----  Enter 20 for '20%' discount  ----  \n";
-//    cout << "\n  Enter Discount :   ";  discount = use.StoFconv();
-//  
-//    while (discount >= 100.00f)
-//    {
-//        cout << "\n\n  *****   invalid input   ***** \n  Enter valid discount ( 0 <= Discount < 100 )\n";
-//
-//        cout << "\n  Enter Discount :   ";  discount = use.StoFconv(); // how much discount u want to provide like 20 = 20percent not 20rs
-//    }
-//
-//    tax_charge = 18.00; // 18 percent tax charges
-//
-//    total = 0;
-//
-//    for (int loop = 0; loop < itemcount; loop++)
-//    {
-//        total = total + ((order.price[order.order_id[accept - 1][loop] - 1001]) * (order.storequantity[accept - 1][loop])); // total = 0(total) + price*quantity
-//    }
-//
-//    total = total - (((total) * (discount)) / 100.00f);  // total = total - discount_charges
-//    
-//    total = total + (((total) * (tax_charge)) / 100.0f); // total = total + tax_charges
-//    
-//    cout << "\n\n  Total Price:  " << float ( total  ) << "rs. " << endl;
-//    
-//    cout << "\n Enter the amount paid by custmor:   ";   paid = use.StoFconv();
-//    
-//
-//    while ((paid) != 0.00f && (paid) < ( float (total) ) )
-//    {
-//        cout << "\n\n  !!!   Sorry   !!!  The amount is not enough for your order. \n";
-//        cout << "\n  -----   Enter enough amount to contiune   -----  OR  -----   Enter amount '0' to view more options   -----  \n ";
-//
-//        cout << "\n  ENTER :  ";    paid = use.StoFconv(); //price paid by custmor
-//        
-//        cin.ignore(numeric_limits<streamsize>::max() );
-//    }
-//
-//    if ((paid) >= ( float ( total ) ))
-//
-//    {
-//        change = (paid) - ( float (total) );
-//        cout << "\n\n  Change ( the amount worker has to return )  :   " << change << "rs. " << endl;
-//    }
-//}
-//
+//-----------------Calculate Bill Functon---------------------------
+
+vector<float> restaurant :: CalculateBill(int orderNo, vector<pair<string, int>> &i_q)
+{ 
+    float discount;
+	float tax_charge = 18.00; // 18 percent tax charges
+    float total = 0;          // total bill 
+    float paid;               // amount paid by customer
+    float change;            // change amount return to customer
+    
+    cout << "\n  Enter Discount like the below example: \n  ----  Enter 20 for '20%' discount  ----  \n";
+    cout << "\n  Enter Discount :   ";  
+    discount = use.StoFconv();
+  
+    while (discount >= 100.00f)
+    {
+        cout << "\n\n  *****   invalid input   ***** \n  Enter valid discount ( 0 <= Discount < 100 )\n";
+        cout << "\n  Enter Discount :   ";
+		discount = use.StoFconv(); // how much discount u want to provide like 20 = 20percent not 20rs
+    }
+
+    total = getTotalOrderAmount(i_q);      // sum of all (price*quantity);
+
+    total = total - (((total) * (discount)) / 100.00f);  // total = total - discount_charges
+    
+    total = total + (((total) * (tax_charge)) / 100.0f); // total = total + tax_charges
+    
+    cout << "\n\n\t\tTotal Price:  " << float ( total  ) << "rs. " << endl;
+    
+    cout << "\n\t\tEnter the amount paid by custmor:   ";   
+	paid = use.StoFconv();
+    
+    while ((paid != 0.00f) && (paid < total) )
+    {
+        cout << "\n\n!!\t\t!   Sorry   !!!  The amount is not enough for your order. \n";
+        cout << "\n\t\t-----   Enter enough amount to contiune   -----  OR  -----   Enter amount '0' to cacel order   -----  \n ";
+
+        cout << "\n\n\t\tENTER :  ";    
+		paid = use.StoFconv(); //price paid by custmor
+    }
+
+    if (paid >=  total)
+    {
+        change = (paid) - total;
+        cout << "\n\n\t\tChange ( the amount worker has to return )  :   " << change << "rs. " << endl;
+    }
+    else
+    return {};
+    
+
+    vector<float> bill = {discount, tax_charge, total, paid, change};
+    return bill;
+}
+
 ////------------x---------------x-------------x-------------------x--------------x----------------x----------------x
 //
-////-----------------------Print Bill Function------------------------
-//
-//void Co_Details ::PrintBill(unsigned short int accept, bool dis) // accept = order no. && bool dis will be for deciding whether to print or not this detail
-//
-//{
-//    cout << "\n\n\n\t\t!!!!!!!!   SUMIT AGGARWAL aka CODE OWNER.RESTURANT.Details   !!!!!!!!\n";
-//    cout << "\n\t\t\t!!!!!!   OrderNo :: [" << accept << "]   !!!!!!! \n";
-//
-//    if (dis == true) // only print these details for resturant (store data)  ,,,, don't print them on bill
-//
-//    {
-//        cout << "\n        !!!!!!  Total custmor till now =  -- " << order.Customer_Count << " --   !!!!!!! \n\n";
-//        ;
-//
-//        cout << "\n  ---------   CUSTOMER'S DETAILS   ----------\n";
-//        cout << "\n  Customer's frequent visit = " << Co_visit << endl;
-//        cout << "\n  Phone number : " << Co_phonenumber << endl;
-//    }
-//
-//    cout << "\n  Name : " << Co_name << endl;
-//
-//    cout << "\n  -------------   ORDER   -------------\n";
-//    cout << "\n  DISH " << setw(13) << ": "
-//         << "  Q(n)      :   Price*Q(n) rs.\n\n";
-//
-//    for (int loop = 0; loop < itemcount; loop++)
-//
-//    {
-//
-//        if (dis == true || order.storequantity[accept - 1][loop])
-//
-//        {
-//
-//            cout << "\n  " << order.dishes[order.order_id[accept - 1][loop] - 1001] << setw(20 - (order.dishes[order.order_id[accept - 1][loop] - 1001].length()));
-//            cout << ": Q(" << order.storequantity[accept - 1][loop] << ")      :   ";
-//            cout << ((order.price[order.order_id[accept - 1][loop] - 1001]) * order.storequantity[accept - 1][loop]) << " rs.\n";
-//        }
-//    }
-//
-//    cout << "  ---------------------------------------------------------\n";
-//    cout << "\n  Total         :  " << total   << " rs.\n";
-//    cout << "\n  Paid          :  " << paid << " rs.\n";
-//    cout << "\n  Change        :  " << change << " rs.\n";
-//    cout << "\n  Tax Charges   :  " << tax_charge << " %\n";
-//    cout << "\n  Discount      :  " << discount << " %\n";
-//    cout << "---------------------------------------------------------\n";
-//
-//    if (dis == true)
-//        Display_O_DateTime();
-//
-//    else
-//
-//    {
-//
-//        cout << "\n     ######   WE HOPE YOU ENJOY YOUR MEAL   ######\n";
-//
-//        Save_O_DateTime();
-//    
-//    }
-//}
-//
-////------------x---------------x-------------x-------------------x--------------x----------------x----------------x
-//
+//-----------------------Print Bill Function------------------------
+
+void restaurant :: PrintBill(string order_id) 
+{ 
+	auto details = getCustomerDetails(order_id); // name, contact, frequency_visit;
+    
+    if(details.empty())
+    return;
+
+    cout << "\n\n\n\t\t!!!!!!!!   SUMIT AGGARWAL aka CODE OWNER.RESTURANT.Details   !!!!!!!!\n";
+    cout << "\n\t\t\t!!!!!!   OrderNo :: [" << order_id.substr(12) << "]   !!!!!!! \n";
+
+    
+    cout << "\n------------   CUSTOMER'S DETAILS   ----------\n";
+    cout << "\n    Phone number : " << details[1] << endl;
+    cout << "\n    Name : " << details[0] << endl;
+    cout << "\n-------------       ORDER      ----------------\n";
+
+
+	printOrderItem(order_id);
+    auto bill = fetchBill(order_id);
+
+    if(bill.empty())
+    return;
+
+    cout << "  ---------------------------------------------------------\n";
+    cout << "\n       Total         :  " << bill[0]   << " rs.\n";
+    cout << "\n       Paid          :  " << bill[1] << " rs.\n";
+    cout << "\n       Change        :  " << bill[2] << " rs.\n";
+    cout << "\n       Tax Charges   :  " << bill[3] << " %\n";
+    cout << "\n       Discount      :  " << bill[4] << " %\n";
+    cout << "---------------------------------------------------------\n";
+    
+    cout << "\n     ######   WE HOPE YOU ENJOY YOUR MEAL   ######\n";
+    string time = details[2];
+    cout <<"\n\t\t"<<order_id.substr(0,10)<<" "<<time<<endl;
+        
+}
+
+//------------x---------------x-------------x-------------------x--------------x----------------x----------------x
+
 //------------------------TAKE ORDER FUNCTION----------------------------
 
-void resturant ::takeorder(void)
+void restaurant ::takeorder(void)
 {
     int orderNo = getOrderNo() + 1;  // orderNo
-    string order_id = getDate() + " " + to_string(orderNo); // order_id (unqiue for everyorder) = date + order_no;
+    string order_id;                 // order_id (unqiue for everyorder) = date + order_no;
     bool details = false;   // customer details are stored -- not yet
     string name;           // custmor name
     string contact;        // contact;
     int cancel_0;          // to track loop
+    string time;
+    vector<pair<string, int>> item_quantity;
+    unordered_map<string, int> track; // keeps tracks of dishes and there index number in vector item_quantity to edit/change
+    int index = 0; //index to be put inot unorder_map
 
     if (!getTotalItems())
     {
@@ -531,21 +669,27 @@ void resturant ::takeorder(void)
           for (; loop == '1';)
            {
            	   cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');    
-               // dish_id for the dish to be ordered
-               cout << "\n\t\t  Enter id num of the dish  :  ";     
-               string dish_id;
-               getline(cin, dish_id);
+               // dish_name for the dish to be ordered
+               cout << "\n\t\t  Enter dish  :  ";     
+               string dish_name;
+               getline(cin, dish_name);
 
                // quantity of the dish
                cout << "\n\t\t  Enter Quantity  :  ";
-               string quantity;
-               getline(cin, quantity);
+               int quantity = use.StoIconv();
                
-               // price of the dish
-               string price = getPrice(dish_id);
                
-               // insert into orders table into database
-               insertItemsToOrder(order_id, dish_id, quantity, price);
+               if (track.count(dish_name) > 0) 
+			   {
+			   	item_quantity[track[dish_name]].second = quantity;
+			   }
+            
+			   else 
+			   {
+        	     item_quantity.push_back({dish_name, quantity});
+        	     track[dish_name] = index++;
+               }
+
 
                // ADD MORE ITEMS / CANCEL ORDER / ORDER COMPLETED
                cout << "\n\n\t\tEnter '1' to add more items\t\tEnter '0' if done  \n";
@@ -566,71 +710,56 @@ void resturant ::takeorder(void)
 
            }// for loop = 0, c;
 
-           if(loop == 'c')
+           if (loop == '0' ) 
            {
-                deleteFromOrders(order_id);
-                return;
-           }
-
-           if (loop == '0' && !details) // if details are already filled don't ask again(in case of order edit)
-           {
+           	  if(!details) // if details are already filled don't ask again(in case of order edit)
+           	  {
            	  cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');    
               cout << "\n\n\t\t  Enter Custmor's name  :  ";
               getline(cin, name);
 
-              cout << "\n  Enter Customer's Phone Number  :  ";
+              cout << "\n\n\t\t  Enter Customer's Phone Number  :  ";
               getline(cin, contact);
 
               system("cls");
+			  }
 
-              //CalculateBill(OrderNo); // payment calculations
-
-              cout << "\n\t\t ENTER '0' TO EDIT ORDER\t\t\tENTER '1' TO CONTINUE";
-              cout<<"\n\n\t\t\t ENTER:  ";
-              cancel_0 = use.StoIconv();
-              system("cls");
-
-              if (cancel_0 == 0) // either the order is free or custmor want to cancel order or custmor want to edit the order
-              {
-                   cin.ignore(numeric_limits<streamsize>::max() ); // to clean buffer
-
-                   cout << "\n\n\t\tEnter '0' to cancel order\t\t\tEnter '2' to edit order\n";
-                   cout << "\n\t\t\tEnter '1' if order is free\n";
-                   cout << "\n  ENTER  :  ";            
+              auto temp = order.CalculateBill(orderNo, item_quantity); // payment calculations in float
+              if(temp.empty())
+              return;
+              
+			  vector<string> bill; // convert to string to stroe in database
+              for(auto i : temp)
+              bill.push_back(to_string(i));
+              	
+                   cout << "\n\n\t\tEnter '0' to cancel order\t\t\tEnter '1' to edit order\n";
+                   cout << "\n\n\t\tEnter any other number to continue";
+                   cout << "\n\t\tENTER  :  ";            
                    cancel_0 = use.StoIconv();
-
-                   while (cancel_0 != 0 && cancel_0 != 1 && cancel_0 != 2) // in case of invalid input-- repeat
-                   {
-                   cin.ignore(numeric_limits<streamsize>::max(), '\n'); // to clean buffer
-                   cout << "\n\n\t\tEnter '0' to cancel order\t\tEnter '1' to edit order\n";
-                   cout << "\n\t\t\tEnter '2' if order is free\n";
-                   cout << "\n  ENTER  :  ";            
-                   cancel_0 = use.StoIconv();
-                   } // while -ends here
-              } // if -ends here
-
+             
                switch (cancel_0)
                {
                case 0: // case to cancel order
-               deleteFromOrders(order_id);
-               break;
-
-               case 1: //order free
-               insertCustomerDetails(order_id, contact, name); // contact, name into database
                return;
 
-               case 2: // edit order
+               case 1: // edit order
                cout << "\n\n       *************    You can CHANGE, DELETE OR ADD ITEM BY SIMPLY ENTERING THE DISH'ID AND QUANTITY   ***********\n ";
                break;
 
                default: // print bill on any default case
-               insertCustomerDetails(order_id, contact, name);
-               //PrintBill(OrderNo, false);        
-               }
-            }
-       } while (cancel_0 == 2); // to edit order
-   }
-}
+               order_id = getDate() + " " + to_string(orderNo);
+               time = getCurrTime();
+               insertCustomerDetails(order_id, contact, name, time); // contact, name into database
+               insertItemsToOrder(order_id, item_quantity); // insert into orders table into database
+               insertBillDetails(order_id, bill);
+               order.PrintBill(order_id);
+               }//switch
+               
+               details = true; // customer details filled don't ask again
+            }// id details filled
+       } while (cancel_0 == 1); // to edit order
+   }//else, id no menu
+}//takeorder
 
 ////------------x---------------x-------------x-------------------x--------------x----------------x----------------x
 //
@@ -684,7 +813,7 @@ void resturant ::takeorder(void)
 
 //----------------MENU-MAKER FUNCTION----------------------
 
-void resturant ::menumaker(void)
+void restaurant ::menumaker(void)
 
 {
     
@@ -744,14 +873,17 @@ void resturant ::menumaker(void)
 
 
 
-void resturant :: RemoveItem ( void )
+void restaurant :: RemoveItem ( void )
 {
     for (char loop = '1'; loop == '1';)
     {
-            cout << "\n\n  Enter the id number of item you want to change  :  ";
-            string id; // dish_id requrired to delete from database
+            cout << "\n\n  Enter the item name you want to remove  :  ";
+            string name; // dish_name requrired to delete from database
             cin.ignore(numeric_limits<streamsize>::max(), '\n');
-            getline(cin, id);
+            getline(cin, name);
+            
+            string id = getDishId(name);   // fetch dish_id using dish name
+            
             // delete item from database
             string del = "DELETE FROM menu WHERE dish_id = '" + id + "' ";
                 if (mysql_query(conn, del.c_str()))
@@ -788,7 +920,7 @@ void resturant :: RemoveItem ( void )
 
 //----------------------MENU DISPLAY-------------------------------
 
-void resturant ::menudisplay(void)
+void restaurant ::menudisplay(void)
 {
   string show = "SELECT * FROM menu";
 
@@ -824,15 +956,15 @@ void resturant ::menudisplay(void)
 
 //---------------------CHANGE PRICE FUNCTION---------------------------
 
-void resturant ::changeprice(void)
+void restaurant ::changeprice(void)
 
 {
     for (char loop = '1'; loop == '1';)
     {
-        cout << "\n\n  Enter the id number of item you want to change  :  ";
-        string id;    // dish_id requrired to update database 
+        cout << "\n\n  Enter the item you want to change  :  ";
+        string oldName;    // dish_name requrired to update database 
         cin.ignore(numeric_limits<streamsize>::max(), '\n');
-        getline(cin, id);
+        getline(cin, oldName);
         
         string newName;    // new name for item          
         cout << "\n\n  To change dish name, enter new name of dish  :  ";
@@ -841,6 +973,8 @@ void resturant ::changeprice(void)
 	    cout << "\n\n  To change price, enter new price  :  ";
         string newPrice;   // new price for item
         getline(cin, newPrice);
+        
+        string id = getDishId(oldName);  //fetch dish_id from database whose dish_name is oldName
         
         system("cls");
 
@@ -876,7 +1010,7 @@ void resturant ::changeprice(void)
 
 //---------------------EDIT MENU FUNCTION----------------------------------
 
-void resturant ::editmenu(void)
+void restaurant ::editmenu(void)
 {
 
     for (bool loop = true; loop;)
@@ -1129,7 +1263,6 @@ int main()
     }
     Sleep(1000);
     
-    forcereturn use; //forcereturn is a class ---and --- 'use' is its object;
     //Co_Details view;
     
     bool loop = true;
