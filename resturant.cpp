@@ -659,10 +659,12 @@ void restaurant ::takeorder(void)
     }
    
     cout << "\n\t\t  !!!!!!       Order No [" << orderNo << "]        !!!!!!! \n";
-    while (cancel_0 == 1) {
+ while (cancel_0 == 1) 
+ {
     char loop = '1'; // Initialize loop condition for entering the loop
 
-    for (; loop == '1';) {
+    for (; loop == '1';) 
+    {
         cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
         // Prompt user to enter the dish name
@@ -717,7 +719,96 @@ void restaurant ::takeorder(void)
             system("cls");
         }
     } // for loop
-    }//while        
+
+    if (loop == '0') 
+    {
+      if (!details) 
+      {
+        // Get customer's name
+        bool isValidName = false;
+        cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        while (!isValidName) 
+	{
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            system("cls");
+
+            cout << "\n\n\t\t  Enter Customer's Name :  ";
+            getline(cin, name);
+
+            if (name.size() > 30) 
+	    {
+                cout << "\n\t\tNAME TOO LONG: MAX LENGTH 30 CHARACTERS\n\n";
+                continue;
+            }
+            if (name.size() == 0) 
+	    {
+                cout << "\n\t\tNAME TOO SHORT: MIN LENGTH 1 CHARACTER\n\n";
+                continue;
+            }
+            isValidName = true;
+        }
+
+        // Get customer's contact
+        bool isValidContact = false;
+        while (!isValidContact) 
+	{
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            system("cls");
+            cout << "\n\n\t\t  Enter Customer's Contact :  ";
+            getline(cin, contact);
+
+            if (contact.size() > 14) 
+	    {
+                cout << "\n\t\tINVALID CONTACT\n\n";
+                continue;
+            }
+            isValidContact = true;
+        }
+
+        system("cls");
+	details = true;
+      }// IF --- DETAILS FILLED	      
+        
+     // Calculate the bill and handle order cancellation
+     auto temp = CalculateBill(orderNo, item_quantity);
+     if (temp.empty()) 
+     {
+        cout << "\t\tORDER CANCELLED\n";
+        return;
+      }
+
+      // Convert the bill to string for database storage
+      vector<string> bill;
+      for (auto i : temp)
+      bill.push_back(to_string(i));
+
+      // Prompt user for further action: cancel order, edit order, or continue
+      cout << "\n\n\t\tEnter '0' to cancel order\t\t\tEnter '1' to edit order\n";
+      cout << "\n\n\t\tEnter any other number to continue";
+      cout << "\n\t\tENTER  :  ";
+      cancel_0 = use.StoIconv();
+      
+      switch (cancel_0) 
+      {
+            case 0: // Case to cancel order
+                return;
+
+            case 1: // Case to edit order
+                cout << "\n\n       *************    You can CHANGE, DELETE OR ADD ITEM BY SIMPLY ENTERING THE DISH NAME AND QUANTITY   ***********\n ";
+                break;
+
+            default: // Print bill on any default case
+                order_id = getDate() + " " + to_string(orderNo);
+                time = getCurrTime();
+                insertCustomerDetails(order_id, contact, name, time);
+                insertItemsToOrder(order_id, item_quantity);
+                insertBillDetails(order_id, bill);
+                PrintBill(order_id);
+       }//SWITCH
+	
+    } // If loop condition
+	 
+ }//while customer wants to edit order keep going to step 1        
        
 }//takeorder
 
