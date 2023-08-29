@@ -20,12 +20,17 @@
 #include <mysql.h>
 #include <mysqld_error.h>
 #include <sstream>
+#include<psapi.h>
+#include <wininet.h>
+#pragma comment(lib, "Wininet.lib")
 
 using namespace std;
 
-const char *HOST = "localhost";
-const char *USER = "root";
-const char *DB = "Restaurant";
+
+const char *HOST = "";     // YOUR OWN HOST : LOCAL OR ANY OTHER  
+const char *USER = "";    // AND YOUR USER NAME
+const char *DB = "";   // YOU HAVE TO USE YOUR OWN DB 
+const char *PW = "";  // AND ITS PASSWORD
 MYSQL *conn;
 
 //---------------------------Forward Declarations--------------------------------------------------------------
@@ -60,10 +65,8 @@ public:
 class restaurant
 {
 private:
-   
-    // ------ void editmenu(void) will call these 4 functions  -----------
+    // ------ void editmenu(void) will call these 3 functions  -----------
     void menumaker(void);        // helps to make a menu 
-    void menudisplay(void);     // display the menu you set
     void changeprice(void);    // change price or dish name in the menu
     void RemoveItem ( void ) ;              // remove items from menu
     
@@ -75,23 +78,73 @@ private:
     public : 
     void editmenu(void); // to view all the options available for menu - setting
     void takeorder(void);            // take order 
-    void DisplayData(void);          // display custmor's data with the help of order number          
+    void DisplayData(void);          // display custmor's data with the help of order number
+	void menudisplay(void);     // display the menu you set          
    
-} order;
+}order;
 
 
 // MYSQL FUNCTIONS ---------->
 
-// ********************   ASK PASSWORD FROM USER TO ACCESS DATABASE **********************  
+// ********************   ASK PASSWORD FROM USER TO ACCESS DATABASE **********************
 
-string getPassword(){                
-	cout << "\t\tENTER PASSWORD TO CONNECT WITH DATABASE:  ";
-	string pwd;
-	getline(cin, pwd);
-	system( "cls" );
-	
-	return pwd;
-}
+bool checkInternetConnection()
+{
+	cout << "\t\t\t\tconnecting  ...  please wait  ";
+	char url[256];
+    strcat(url, "http://www.phpmyadmin.co");
+    bool isconnect = InternetCheckConnectionA(url, FLAG_ICC_FORCE_CONNECTION,0);
+    if(isconnect)
+    {
+        //cout<<"\nInternet Connected";
+        return 1;
+    }
+    else
+    {
+    	system("cls");
+        cout<<"\nDISCONNECTED : PLEASE CHECK YOUR INTERNET CONNECTION!!";
+        return 0;
+    }
+    system("cls");
+} 
+ 
+// check databse connection .. server down etc 
+bool checkDatabaseConnection()
+{
+	cout << "\t\t\t\tconnecting  ...  please wait  ";
+	if (!mysql_real_connect(conn, HOST, USER, PW, DB, 3306, NULL, 0))
+    {
+        cout << "Error: " << mysql_error(conn) << endl;
+        std::this_thread::sleep_for(std::chrono::milliseconds(4000));
+        return 0;
+    }
+    else
+    {
+        cout << "\t\t\tLogged in!" << endl;
+    }
+    system("cls");
+    return 1;
+} 
+
+// check if person is a customer or adim to provide differernt functionalities
+bool checkAccessId()
+{
+  cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');	
+  cout <<"\n\n\t\t\tENTER PASSWORD TO CONTINUE : ";
+  string pwd;
+  getline(cin, pwd);
+  
+  if(pwd == PW) // same password as of databse
+  return 1;
+  
+  else
+  {
+  	cout <<"\n\t\t\tACCESS DENIED !!\n";
+  	std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    return 0;
+  }
+  
+}  
 
 //// ---------------------GET orderdone Time----------------------------
 string getCurrTime()
@@ -321,7 +374,6 @@ float getTotalOrderAmount(vector<pair<string, int>> &i_q)
 
         sum += stof(getPrice(dish_name)) * quantity;  // GET PRICE FOR A DISH AND THEN MULTIPLY BY QUANTITY DO THIS FOR ALL DISH ORDERED
     }
-
     return sum;
 }
 
@@ -388,7 +440,7 @@ void insertItemsToOrder(string order_id, vector<pair<string, int>> &i_q)
         }
         else
         {
-        std::cout << "ORDER TAKEN" << std::endl; // ORDER INSERTED SUCCESSFULLY
+        std::cout << "\t\t\tORDER TAKEN" << std::endl; // ORDER INSERTED SUCCESSFULLY
         }
     }
     else // ROLLBACK CURRENT INSERT ITEMS FROM DATABASE IF SUCCESS IS FALSE
@@ -437,7 +489,7 @@ void insertCustomerDetails(string order_id, string contact, string name, string 
     }
     else
     {
-        cout << "\t\tDeatails Filled" << endl;
+        cout << "\t\tPROCESSING: " << endl;   // processing of next step insert bill details into databse
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
         
     }
@@ -485,7 +537,7 @@ void insertBillDetails(string order_id, vector<string> &bill)
     }
     else
     {
-        cout << "\t\tDeatails Filled" << endl;
+        cout << "\t\tPROCESSING: " << endl;  // processing for next step --- insert items of order into database
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
     system("cls");
@@ -540,31 +592,24 @@ void deleteItemFromMenu(string id)
 //-----------------Calculate Bill Functon---------------------------
 
 vector<float> restaurant :: CalculateBill(int orderNo, vector<pair<string, int>> &i_q)
-{ 
-    float discount;            
+{  
+    float discount = 0;      // I had some other plans at first but its okay      
     float tax_charge = 18.00; // 18 percent tax charges
     float total = 0;          // total bill 
     float paid;               // amount paid by customer
     float change;            // change amount return to customer
-    
-    cout << "\n  Enter Discount like the below example: \n  ----  Enter 20 for '20%' discount  ----  \n";
-    cout << "\n  Enter Discount :   ";  
-    discount = use.StoFconv();
-  
-    while (discount >= 100.00f)
-    {
-        cout << "\n\n  *****   invalid input   ***** \n  Enter valid discount ( 0 <= Discount < 100 )\n";
-        cout << "\n  Enter Discount :   ";
-	discount = use.StoFconv(); // how much discount u want to provide like 20 = 20percent not 20rs
-    }
 
+    // -----------------x---------------x------------------x---------------x-----------  calculation of total price
     total = getTotalOrderAmount(i_q);      // sum of all (price*quantity);
-
-    total = total - (((total) * (discount)) / 100.00f);  // total = total - discount_charges
+    if(total < 0)
+    return {};
     
+    //getDiscount(); not implemented
+	//total = total - (((total) * (discount)) / 100.00f);  // total = total - discount_charges
     total = total + (((total) * (tax_charge)) / 100.0f); // total = total + tax_charges
-    
     cout << "\n\n\t\tTotal Price:  " << total << "rs. " << endl;
+    
+    // -----------------x---------------x------------------x---------------x-----------   amount paid by cusomer is acceptable or not
     
     cout << "\n\t\tEnter the amount paid by custmor:   ";   
     paid = use.StoFconv();
@@ -572,21 +617,22 @@ vector<float> restaurant :: CalculateBill(int orderNo, vector<pair<string, int>>
     
     while (paid < total)  // if paid amount is less than payable amount
     {
-        cout << "\n\n!!\t\t!   Sorry   !!!  The amount is not enough for your order. \n";
-        cout << "\n\t\t-----   Enter enough amount to contiune   -----  OR  -----   Enter amount '0' to cacel order   -----  \n ";
-
-        cout << "\n\n\t\tENTER :  ";    
+        cout << "\n\n\t\t!!!   Sorry   !!!    The amount is not enough for your order. \n";
+        cout << "\n\t\tEnter enough amount to contiune OR\t\tEnter amount '0' to cacel order   -----  \n ";
+        cout << "\n\n\t\tTotal Price:  " << total << "rs.\t\tENTER:  ";    
+	
 	paid = use.StoFconv(); //price paid by custmor
 	system("cls");	
-	if(paid == 0)
-	return;	
+	if(paid < total && paid == 0)
+	return {};	
     }
+    
+    // -----------------x---------------x------------------x---------------x-----------  
 
-    if (paid >=  total)
-    {
-        change = (paid) - total;
-        cout << "\n\n\t\tChange ( the amount working employee has to return )  :   " << change << "rs. " << endl;
-    }
+    change = (paid) - total;
+    cout << "\n\n\t\tChange ( the amount working employee has to return )  :   " << change << "rs. " << endl;
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    
     
     system("cls");
     vector<float> bill = {discount, tax_charge, total, paid, change};
@@ -594,7 +640,8 @@ vector<float> restaurant :: CalculateBill(int orderNo, vector<pair<string, int>>
 }
 
 ////------------x---------------x-------------x-------------------x--------------x----------------x----------------x
-//
+
+
 //-----------------------Print Bill Function------------------------
 
 void restaurant :: PrintBill(string order_id) 
@@ -632,7 +679,7 @@ void restaurant :: PrintBill(string order_id)
     cout << "\n     ######   WE HOPE YOU ENJOY YOUR MEAL   ######\n";
     string time = details[2];
     cout <<"\n\t\t"<<order_id.substr(0,10)<<" "<<time<<endl;
-        
+    std::this_thread::sleep_for(std::chrono::milliseconds(5000));
 }
 
 //------------x---------------x-------------x-------------------x--------------x----------------x----------------x
@@ -654,15 +701,13 @@ void restaurant ::takeorder(void)
 
     if (!getTotalItems())
     {
-        cout << "\n\t\t  !!!!!!   SORRY   !!!!!\n\t\t  **********   NO ITEM TO ORDER   **********\n\n";
-	return;    
+      cout << "\n\t\t  !!!!!!   SORRY   !!!!!\n\t\t  **********   NO ITEM TO ORDER   **********\n\n";
+	  return;    
     }
-   
-    cout << "\n\t\t  !!!!!!       Order No [" << orderNo << "]        !!!!!!! \n";
+    
  while (cancel_0 == 1) 
- {
+ {  
     char loop = '1'; // Initialize loop condition for entering the loop
-
     for (; loop == '1';) 
     {
         cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -702,20 +747,16 @@ void restaurant ::takeorder(void)
         }
 
         // Prompt user for further action: add more items, cancel order, or complete order
-        cout << "\n\n\t\tEnter '1' to add more items\t\tEnter '0' if done\n";
-        cout << "\n\t\t\tEnter 'c' to Cancel Order\n";
-        cout << "\n  ENTER: ";
-        loop = use.StoCconv();
+        cout << "\n\n\t\tENTER '1' TO ADD MORE ITEMS\t\tENTER '0' IF DONE\n";
+        cout << "\n\t\tENTER 'C' TO CANCEL ORDER\t\t  ENTER: "; loop = use.StoCconv();
         system("cls");
 
-        while (loop != '1' && loop != '0' && loop != 'c') 
+        while (loop != '1' && loop != '0' && loop != 'c' && loop != 'C') 
         {
             // In case of invalid input, prompt user until valid input is received
-            cout << "\n\n  *****   INVALID INPUT   *****\n";
-            cout << "\n\n\t\tEnter '1' to add more items\t\t\tEnter '0' if done\n";
-            cout << "\t\t\t\tEnter 'c' to Cancel Order\n";
-            cout << "\n\n\t\tENTER: ";
-            loop = use.StoCconv();
+            cout << "\n\n\t\t\t*****   INVALID INPUT   *****\n\n";
+            cout << "\n\n\t\tENTER '1' TO ADD MORE ITEMS\t\tENTER '0' IF DONE\n";
+            cout << "\n\t\t\tENTER 'C' TO CANCEL ORDER\t\t  ENTER: "; loop = use.StoCconv();
             system("cls");
         }
     } // for loop
@@ -728,7 +769,7 @@ void restaurant ::takeorder(void)
         bool isValidName = false;
         cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         while (!isValidName) 
-	{
+	    {
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
             system("cls");
 
@@ -736,12 +777,12 @@ void restaurant ::takeorder(void)
             getline(cin, name);
 
             if (name.size() > 30) 
-	    {
+	        {
                 cout << "\n\t\tNAME TOO LONG: MAX LENGTH 30 CHARACTERS\n\n";
                 continue;
             }
             if (name.size() == 0) 
-	    {
+	        {
                 cout << "\n\t\tNAME TOO SHORT: MIN LENGTH 1 CHARACTER\n\n";
                 continue;
             }
@@ -751,14 +792,14 @@ void restaurant ::takeorder(void)
         // Get customer's contact
         bool isValidContact = false;
         while (!isValidContact) 
-	{
+	    {
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
             system("cls");
             cout << "\n\n\t\t  Enter Customer's Contact :  ";
             getline(cin, contact);
 
             if (contact.size() > 14) 
-	    {
+	        {
                 cout << "\n\t\tINVALID CONTACT\n\n";
                 continue;
             }
@@ -766,10 +807,10 @@ void restaurant ::takeorder(void)
         }
 
         system("cls");
-	details = true;
+	    details = true;
       }// IF --- DETAILS FILLED	      
         
-     // Calculate the bill and handle order cancellation
+     // Calculate the bill and handle order cancellation -------------------------------------------->
      auto temp = CalculateBill(orderNo, item_quantity);
      if (temp.empty()) 
      {
@@ -784,8 +825,7 @@ void restaurant ::takeorder(void)
 
       // Prompt user for further action: cancel order, edit order, or continue
       cout << "\n\n\t\tEnter '0' to cancel order\t\t\tEnter '1' to edit order\n";
-      cout << "\n\n\t\tEnter any other number to continue";
-      cout << "\n\t\tENTER  :  ";
+      cout << "\n\n\t\ENTER ANY OTHER 'NUMBER' TO CONTINUE\t\tENTER: ";
       cancel_0 = use.StoIconv();
       
       switch (cancel_0) 
@@ -821,9 +861,8 @@ void restaurant ::takeorder(void)
 void restaurant :: DisplayData(void)
 {
     for (char decide = '1'; decide == '1';)
-    {
-    	cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n'); 
-        cout << "\n\t\tEnter Order Number  :  ";           
+    { 
+    cout << "\n\t\tEnter Order Number  :  ";           
 	string orderNo;
 	getline(cin, orderNo);
 		
@@ -833,30 +872,21 @@ void restaurant :: DisplayData(void)
         
         string order_id = date + " " + orderNo;
        
-	if(searchOrderIdInOrder(order_id)) 
+	    if(searchOrderIdInOrder(order_id)) 
         PrintBill(order_id);
-        
+		      
         else
         {
           cout << "\n\t\t THERE IS NO ORDER NO:  "<<orderNo<<"  ON DATE:  "<<date<<endl;
+          std::this_thread::sleep_for(std::chrono::milliseconds(1200));
           return;
-	}
+	    }
         
-        cout << "\n\n\nprocessing ... \n";
-        std::this_thread::sleep_for(std::chrono::milliseconds(10000));
+        cout << "\n\n\nGOING BACK AFTER 12 SECONDS ... \n";
+        std::this_thread::sleep_for(std::chrono::milliseconds(12000));
         
         system("cls");
-        cout << "\n  Enter '1' to view more Orders                              Enter '0' to go back\n";
-        cout <<   "                                         ENTER  :  ";         decide = use.StoCconv();
-        while (decide != '1' && decide != '0')
-        {
-        cout << "\n                               *****   INVALID INPUT   *****\n";
-        cout << "\n  Enter '1' to view more Orders                              Enter '0' to go back\n";
-        cout <<   "                                         ENTER  :  ";         decide = use.StoCconv();      
-		}
-  
     }
-
 }
 
 ////------------x---------------x-------------x-------------------x--------------x----------------x----------------x
@@ -984,7 +1014,11 @@ void restaurant ::menudisplay(void)
         printf("   %-10s   %-30s   %-10s\n", row[0], row[1], row[2]);
      }
      mysql_free_result(res);
- }  
+ }
+ 
+ cout << "\n\n\n\n\t\tGOING BACK AFTER 12 SECONDS ... \n"; 
+ std::this_thread::sleep_for(std::chrono::milliseconds(12000));
+  
 }
 
 //------------x---------------x-------------x-------------------x--------------x----------------x----------------x
@@ -1037,15 +1071,14 @@ void restaurant ::changeprice(void)
         updateMenu(id, newName, newPrice);
 
         // repeat or exit  
-        cout << "\n  Enter '1' to update menu                                        Enter '0' to go back\n";
-        cout << "\n\t\tENTER  :  ";     
-	loop = use.StoCconv();
+        cout << "\n\t\tEnter '1' to Update items\t\tEnter '0' to go back\n";
+        cout << "\n\t\tENTER  :  ";     loop = use.StoCconv();     
             
         while (loop != '1' && loop != '0')
         {
         cout << "\n\n\t\t*****   INVALID INPUT   *****\n";
-        cout << "  Enter '1' to Update items                                        Enter '0' to go back\n";
-        cout << "\t\tENTER  :  ";     loop = use.StoCconv();
+        cout << "\n\t\tEnter '1' to Update items\t\tEnter '0' to go back\n";
+        cout << "\n\t\tENTER  :  ";     loop = use.StoCconv();
         }
      
     }
@@ -1061,13 +1094,9 @@ void restaurant ::editmenu(void)
 
     for (bool loop = true; loop;)
     {
-        cout << "\n\n  Enter'0' to GO BACK                                                                  Enter '1' to ADD ITEM in MENU \n " ;
-        
-        cout <<     "                               Enter '3' to change dish name and / or Price \n";
-        
-        cout <<     "  Enter '2' to REMOVE ITEM                                                             Enter '4' to DISPLAY MENU \n ";
-        
-        cout <<     "                                          ENTER  :  ";          char ch = use.StoCconv();
+        cout << "\n\n  Enter '0' TO GO BACK             \t\t\tEnter '1' to ADD ITEM in MENU \n " ;
+        cout << "\n\n  Enter '2' TO REMOVE ITEM         \t\t\tEnter '3' to DISPLAY MENU \n ";
+        cout << "\n\n  ENTER '4' TO UPDATE EXISTING ITEM\t\t\tENTER: ";          char ch = use.StoCconv();
        
  
         system ( " cls " );
@@ -1086,13 +1115,13 @@ void restaurant ::editmenu(void)
             else
                 cout << "\n\n  ---------   There is no MENU to edit       -------       Follow case '1' to Make MENU  ------\n ";
             break;
-        case '3':
+        case '4':
             if (getTotalItems())
                 changeprice();
             else
                 cout << "\n\n  ---------   There is no MENU to edit       -------       Follow case '1' to Make MENU  ------\n ";
             break;
-        case '4':
+        case '3':
             if (getTotalItems())
                 menudisplay();
             else
@@ -1237,115 +1266,59 @@ float forcereturn ::StoFconv(void)
 
 //------------x---------------x-------------x-------------------x--------------x----------------x----------------x
 
-//-----------------------------   GLOBAL INFORMATION FUNCTOIN   ------------------------------------
-
-    void Information (void)
-    {
-
-       cout << " -----  NOTE :: INFORMATION HERE IS GOING TO BE ABOUT HOW TO USE THIS PROGRAM NOT ABOUT HOW TO MAKE CHANGES IN THIS PROGRAM\n" 
-            << " \nAt the  very satrting when you will hit your run button you are going to see '5' options and you have to choose one of them (of course).\n" 
-            << " \nBut you can't choose option no. '2' & '3' until you set a menu for your resturant becuase both options requires a 'MENU' to do their function\n "
-            << "   \n------   A BRIEF INTRODUCTION OF THESE '5' OPTIONS  ----------   \n"
-            << " \n     To select an Option you just have to enter the option No.    \n"
-            << " \nOption '0' will help you to take exit from program just by choosing option '0' you will be able to exit this program succesfully\n"
-            << " \nOption '1' will help you to set and edit your ' RESTURANT MENU '.         \n"
-            << " \nOption '2' will help you to take orders but can only be activate by setting a 'MENU'(USING OPTION 1) \n"
-            << " \nOption '3' will be for Displaying all the CUSTOMER'S DATA you collected till now but can only be activate by atleast taking one Order(USING OPTION '2')  \n"
-            << " \nOption '4' is for the displaying all the information about this program as you are seeing right now.   \n"
-            << "\n   -------      Detailed informatoin about Option '1' ( ***  EDIT MENU  *** )    --------  \n"
-            << " \nAs soon as you will enter '1' your option '1' will get activate and your blank menu will be generated now you can fill that menu with more of its features which are embedded into more Options   \n"
-            << " \n$$$  NOTE $$$ A blank menu can not be considered as a menu until you fill it with atleast one item \n" 
-            << " \n--- ADD :: OPTION :: --- will add new items and their price in your menu  $$$$$ IMPORANT $$$$ all of your items are going to be identified by a unique ID named as DISH'ID.\n "
-            << " \n--- DISH'ID :: It's a '4 Digit Code' created by system to uniquely identify  each item in your menu----- you can find it inside DISPLAY-MENU OPTION ( '4' ) inisde Set -Menu OPtion( '1' )\n "
-            << " \n--- REMOVE :: OPTION '2' :: --- Will remove items from your Menu. To do so you just have to enter the DISH'ID(MENTIONED IN ABOVE POINT) OF THE ITEM you want to remove from menu\n  "
-            << " \n--- Change Price :: OPTION '3' :: --- this option will be useful in case you want to change an item name or price and you can do so just by entering DISH'ID and new name or price\n"
-            << " \n--- DISPLAY-MENU :: OPTION '4' :: --- this option is for presenting the menu you build so far.\n"     
-            << " \n--- TO GO  BACK ::  OPTION '0' :: --- it will help to go one step back(where the last options were present) inside the program \n"
-            << " \n$$$  NOTE $$$ It will not exit the program right away it will only help you to take one step back inside the program\n"
-            << " \n\n\n  TAKE ORDER FUNCTON : : :  once you choose this option, a order number will be generated and will be equal to '1' after completion of 1st order and will futher increase by '1' for next order\n"
-            << " \n  By providing order number you can access all the data of customer by using Dispaly order option.\n" 
-            << "\n  ----------------- HOW TO TAKE ORDER --------------\n"
-            << "\n to add new items : enter desired dish'id and the quantity \n"
-            << "\n to REMOVE items : enter desired dish'id and the quantity = '0'  \n"
-            << "\n to CHANGE QUANITY : enter desired dish'id and the quantity = NEW QUANTITY and it will overwrite the old.  \n"
-            << " \n  once you done taking order you will be asked for entering customer's details consist of name and phone number.\n"
-            << " \n Now, phone number here plays a crucial role let's see in depth : : \n"
-            << " \n first of all if a customer don,t have a phone number or phone number entered turns to be invalid than a default phone number will be added instead of the wrong one.\n"
-            << "\n VALID PH_NO. is a 10- digit number whose 1st digit is non zero or a 11- digit number whose 1st digit is zero any other number will be count as INAVLID PH_NO.\n"
-            << "\n eg: 1122334455 - vaild or 01122334455 - vaild  but 001122334455 - INVALID     and     DEFAULT PH_NO IS : 2323232323\n"
-            << "\n Now if a custmor comes with the agian and provide the same details than program will automatically detect and incease the visiting of that person with '1' every time where defalut visitng is '1'  \n"        
-            << "\n After done with details a u be be asked for any discount and then total amount of the order will be shown on screen and worker will be asked for talking that amount from custmoe and enter below the amount taken from custmor named as paid amount\n"
-            << "\n\n Now,  if custmor decides to quit u can enter amount '0' or u can enetr amount <= total in case of succesful payment but u can't enter 0 < paid < total \n"
-            << "\n and if order is free than u can also enter the amount zero but this time data will be stored, without bill \n"
-            << "\n also if customer wants to edit order so that his/her price will be in budget than u can also ener '0' this time it will take u back to the order and will asked for the dish'id you want to change\n"
-            << "\n to add, remove or change item u just have to enter dish'id and quantity \n"
-            << "\n to add new items : enter desired dish'id and the quantity \n"
-            << "\n to REMOVE items : enter desired dish'id and the quantity = '0'  \n"
-            << "\n to CHANGE QUANITY : enter desired dish'id and the quantity = NEW QUANTITY and it will overwrite the old.  \n"
-            << "\n you have to repeat billing process and than you will be done with your order, now you can view data by using DisplayData function. \n";
-     
-    }
-
-//------------x---------------x-------------x-------------------x--------------x----------------x----------------x
-
-//-----------------------------MAIN BODY------------------------------------
-
-int main()
+void viewOptions(char choice, bool &loop)
 {
-
-	const char *PW = getPassword().c_str();	
-    conn = mysql_init(NULL);
-
-    if (!mysql_real_connect(conn, HOST, USER, PW, DB, 3306, NULL, 0))
+   switch (choice)
     {
-        cout << "Error: " << mysql_error(conn) << endl;
-    }
-    else
-    {
-        cout << "\t\tLogged in!" << endl;
-    }
-    Sleep(200);
-    system("cls");
-    
-    //Co_Details view;
-    
-    bool loop = true;
-    while(loop)
-    {
-        cout << "\n\n  Enter '0' to exit                                                                    Enter '1' to set MENU\n ";
-
-        cout <<     "               Enter '4' To get detailed INFORMATION about this program's terms and working \n";
-
-        cout <<     "  Enter '2' to Take Order                                                              Enter '3' to access data\n";
-
-        cout <<     "                                         ENTER  :  ";    char choice = use.StoCconv();
-
-     system( "cls" );
-
-       switch (choice)
-        {
         case '0':
             loop = false;
             break;
         case '1':
+        	if(checkAccessId())
             order.editmenu();
             break;
         case '2':
             order.takeorder();
             break;
         case '3':
+        	if(checkAccessId())
             order.DisplayData();
             break;
-        case '4':
-            Information();
-            break;    
+        case '4' :
+		    order.menudisplay();
+			break;    
         default:
             cout <<"\n\n  *****   INVALID INPUT   *****\n";
-        }
+    }	
+}
+
+
+
+//-----------------------------MAIN BODY------------------------------------
+
+int main()
+{    
+	while(!checkInternetConnection); // connect to internet than continue	
+    
+	conn = mysql_init(NULL);       // establish connection
+    while(!checkDatabaseConnection()); // connect to database
+    
+    bool loop = true;
+    while(loop)
+    {
+    	system("cls");
+        cout << "\n\n  Enter '0' to Exit         \t\t\tEnter '1' to EDIT MENU\n ";
+        cout << "\n\n  Enter '2' to Take Order   \t\t\tEnter '3' to access data\n";
+        cout << "\n\n  Enter '4' to Display Menu \t\t\tENTER  :  "; 
+		char choice = use.StoCconv();
+        system( "cls" );
+        viewOptions(choice, loop);
     }
+    
     mysql_close(conn);
     return 0;
 }
 
 //------------x---------------x-------------x-------------------x--------------x----------------x----------------x
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
