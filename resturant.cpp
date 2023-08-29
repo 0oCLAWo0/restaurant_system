@@ -77,9 +77,9 @@ private:
    
     public : 
     void editmenu(void); // to view all the options available for menu - setting
-    void takeorder(void);            // take order 
+    void placeorder(void);            // take order 
     void DisplayData(void);          // display custmor's data with the help of order number
-	void menudisplay(void);     // display the menu you set          
+    void menudisplay(void);     // display the menu you set          
    
 }order;
 
@@ -90,8 +90,8 @@ private:
 
 bool checkInternetConnection()
 {
-	cout << "\t\t\t\tconnecting  ...  please wait  ";
-	char url[256];
+    cout << "\t\t\t\tconnecting  ...  please wait  ";
+    char url[256];
     strcat(url, "http://www.phpmyadmin.co");
     bool isconnect = InternetCheckConnectionA(url, FLAG_ICC_FORCE_CONNECTION,0);
     if(isconnect)
@@ -686,7 +686,7 @@ void restaurant :: PrintBill(string order_id)
 
 //------------------------TAKE ORDER FUNCTION----------------------------
 
-void restaurant ::takeorder(void)
+void restaurant :: placeorder(void)
 {
     int orderNo = getOrderNo() + 1;  // orderNo
     string order_id;                 // order_id (unqiue for everyorder) = date + order_no;
@@ -860,9 +860,7 @@ void restaurant ::takeorder(void)
 
 void restaurant :: DisplayData(void)
 {
-    for (char decide = '1'; decide == '1';)
-    { 
-    cout << "\n\t\tEnter Order Number  :  ";           
+        cout << "\n\t\tEnter Order Number  :  ";           
 	string orderNo;
 	getline(cin, orderNo);
 		
@@ -886,7 +884,6 @@ void restaurant :: DisplayData(void)
         std::this_thread::sleep_for(std::chrono::milliseconds(12000));
         
         system("cls");
-    }
 }
 
 ////------------x---------------x-------------x-------------------x--------------x----------------x----------------x
@@ -1278,7 +1275,7 @@ void viewOptions(char choice, bool &loop)
             order.editmenu();
             break;
         case '2':
-            order.takeorder();
+            order.placeorder();
             break;
         case '3':
         	if(checkAccessId())
@@ -1298,9 +1295,8 @@ void viewOptions(char choice, bool &loop)
 
 int main()
 {    
-	while(!checkInternetConnection); // connect to internet than continue	
-    
-	conn = mysql_init(NULL);       // establish connection
+    while(!checkInternetConnection); // connect to internet than continue	 
+    conn = mysql_init(NULL);       // establish connection
     while(!checkDatabaseConnection()); // connect to database
     
     bool loop = true;
@@ -1310,7 +1306,7 @@ int main()
         cout << "\n\n  Enter '0' to Exit         \t\t\tEnter '1' to EDIT MENU\n ";
         cout << "\n\n  Enter '2' to Take Order   \t\t\tEnter '3' to access data\n";
         cout << "\n\n  Enter '4' to Display Menu \t\t\tENTER  :  "; 
-		char choice = use.StoCconv();
+	char choice = use.StoCconv();
         system( "cls" );
         viewOptions(choice, loop);
     }
