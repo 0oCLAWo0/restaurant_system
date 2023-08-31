@@ -23,7 +23,7 @@ You can only use it for Placing your Order rest of the functions are for admin.
 
 HOW TO MODIFY OR CONNECT IT TO YOUR OWN DATABASE:
 * Downlaod all the files to your system in a same folder.
-* MODIFY host, pw, username, server in restaurant.cpp file at top with your own databse details.
+* MODIFY host, pw, username, server in restaurant.cpp file at top with your own database details.
 
 DATABASE STRUCTURE: MySQL: case sensitive
 *Database Name : Restaurant
